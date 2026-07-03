@@ -43,8 +43,8 @@ The UI persists provider and model selection back to `~/.openwiki/.env` through 
 
 The first interactive run can prompt for:
 
-- a **provider** (`OPENWIKI_PROVIDER`) — openrouter, baseten, fireworks, openai, or anthropic,
-- the **provider API key** (e.g. `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `BASETEN_API_KEY`, `FIREWORKS_API_KEY`),
+- a **provider** (`OPENWIKI_PROVIDER`) — openrouter, baseten, fireworks, openai, anthropic, or copilot,
+- the **provider API key** (e.g. `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `BASETEN_API_KEY`, `FIREWORKS_API_KEY`, or `COPILOT_GITHUB_TOKEN` for the Copilot engine),
 - a **model ID** stored as `OPENWIKI_MODEL_ID` — chosen from the provider's model list or a custom ID,
 - optional `LANGSMITH_API_KEY` for tracing.
 
@@ -56,15 +56,18 @@ If a LangSmith key is provided, onboarding also enables `LANGCHAIN_PROJECT=openw
 
 Providers and their model options are defined in `PROVIDER_CONFIGS` in `src/constants.ts`:
 
-| Provider   | Env key              | Base URL                                | Models                                                                |
-| ---------- | -------------------- | --------------------------------------- | --------------------------------------------------------------------- |
-| openrouter | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1`          | GLM 5.2, Fusion, Kimi K2.7 Code, Claude Opus/Sonnet, GPT 5.4 mini/5.5 |
-| baseten    | `BASETEN_API_KEY`    | `https://inference.baseten.co/v1`       | GLM 5.2, Kimi K2.7 Code                                               |
-| fireworks  | `FIREWORKS_API_KEY`  | `https://api.fireworks.ai/inference/v1` | GLM 5.2, Kimi K2.7 Code                                               |
-| openai     | `OPENAI_API_KEY`     | (default)                               | GPT 5.4 mini, GPT 5.5                                                 |
-| anthropic  | `ANTHROPIC_API_KEY`  | (default)                               | Haiku, Sonnet, Opus                                                   |
+| Provider   | Env key                | Base URL                                | Models                                                                |
+| ---------- | ---------------------- | --------------------------------------- | --------------------------------------------------------------------- |
+| openrouter | `OPENROUTER_API_KEY`   | `https://openrouter.ai/api/v1`          | GLM 5.2, Fusion, Kimi K2.7 Code, Claude Opus/Sonnet, GPT 5.4 mini/5.5 |
+| baseten    | `BASETEN_API_KEY`      | `https://inference.baseten.co/v1`       | GLM 5.2, Kimi K2.7 Code                                               |
+| fireworks  | `FIREWORKS_API_KEY`    | `https://api.fireworks.ai/inference/v1` | GLM 5.2, Kimi K2.7 Code                                               |
+| openai     | `OPENAI_API_KEY`       | (default)                               | GPT 5.4 mini, GPT 5.5                                                 |
+| anthropic  | `ANTHROPIC_API_KEY`    | (default)                               | Haiku, Sonnet, Opus                                                   |
+| copilot    | `COPILOT_GITHUB_TOKEN` | (Copilot CLI)                           | Claude Sonnet, GPT-5.2                                                |
 
 The default provider is `openrouter`. `resolveConfiguredProvider()` picks the provider from `OPENWIKI_PROVIDER`, falling back to openrouter if `OPENROUTER_API_KEY` is set, then to `DEFAULT_PROVIDER`.
+
+The `copilot` provider is a special engine: instead of a LangChain model and base URL, OpenWiki shells out to the official GitHub Copilot CLI (`copilot`), which must be installed separately (`npm install -g @github/copilot`) and authenticated with `COPILOT_GITHUB_TOKEN` (or an existing `copilot` login). It supports one-shot `--init`/`--update` runs only; interactive chat is not available.
 
 ## Help text and validation
 
@@ -80,7 +83,7 @@ The help content is centralized in `src/commands.ts` and is used by the CLI UI. 
 - Update parser behavior in `src/commands.ts` first.
 - Then update any user-visible text in `src/cli.tsx` and `README.md`.
 - If new options affect run behavior, make sure `src/agent/index.ts` and `src/credentials.tsx` still receive the right inputs.
-- If adding a provider, update `PROVIDER_CONFIGS` and `SELECTABLE_OPENWIKI_PROVIDERS` in `src/constants.ts`, `managedEnvKeys` in `src/env.ts`, and the `createModel` branch in `src/agent/index.ts`.
+- If adding a provider, update `PROVIDER_CONFIGS` and `SELECTABLE_OPENWIKI_PROVIDERS` in `src/constants.ts`, `managedEnvKeys` in `src/env.ts`, and the `createModel` branch in `src/agent/index.ts`. A CLI-driven engine like `copilot` instead forks before `createModel` (see `runCopilotEngine`) and supplies a prompt variant in `src/agent/prompt.ts`.
 - Re-check the `package.json` bin entry and scripts if the entrypoint changes.
 
 ## Source map

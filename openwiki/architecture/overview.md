@@ -44,6 +44,8 @@ Model creation branches by provider in `src/agent/index.ts` (`createModel`):
 - **openrouter** → `ChatOpenRouter` with `route: "fallback"` and a list of fallback models.
 - **baseten / fireworks / openai** → `ChatOpenAI` with the provider's API key and optional custom `baseURL` from `PROVIDER_CONFIGS`.
 
+The **copilot** provider is not a LangChain chat model. `runOpenWikiAgent` forks before `createModel` and calls `runCopilotEngine`, which shells out to the official GitHub Copilot CLI (`copilot -p ... --allow-all-tools`) to run one-shot `--init`/`--update` documentation runs. It reuses the same Git-context, content-snapshot, and metadata scaffolding as the DeepAgents path; interactive chat is rejected for Copilot.
+
 ### DeepAgents backend
 
 The agent uses a DeepAgents `LocalShellBackend` rooted at the repository, configured with `virtualMode: true`, `maxOutputBytes: 100_000`, and a 120 second timeout. A SQLite checkpointer (`~/.openwiki/openwiki.sqlite`) persists conversation threads keyed by a hash of the repository path.
@@ -71,7 +73,7 @@ The current design reflects a documentation product rather than a general-purpos
 
 - Add or refine CLI commands in `src/commands.ts` and the corresponding UI behavior in `src/cli.tsx`.
 - Change onboarding or local credential storage in `src/credentials.tsx` and `src/env.ts`.
-- Add a new model provider by extending `PROVIDER_CONFIGS` and `OpenWikiProvider` in `src/constants.ts`, then adding a branch in `createModel` in `src/agent/index.ts`.
+- Add a new model provider by extending `PROVIDER_CONFIGS` and `OpenWikiProvider` in `src/constants.ts`, then adding a branch in `createModel` in `src/agent/index.ts`. A CLI-driven engine (like `copilot`) instead forks before `createModel` — see `runCopilotEngine`.
 - Adjust model defaults, validation, or fallback lists in `src/constants.ts`.
 - Extend the documentation prompt or Git evidence in `src/agent/prompt.ts` and `src/agent/utils.ts`.
 - Modify run persistence or snapshot behavior in `src/agent/utils.ts`.
