@@ -20,7 +20,11 @@ import {
   saveOpenWikiEnv,
   type CredentialDiagnostic,
 } from "./env.js";
-import { createOpenWikiThreadId, runOpenWikiAgent } from "./agent/index.js";
+import {
+  createCopilotCliArgs,
+  createOpenWikiThreadId,
+  runOpenWikiAgent,
+} from "./agent/index.js";
 import {
   type OpenWikiRunEvent,
   type OpenWikiRunResult,
@@ -599,6 +603,12 @@ function HelpView() {
   );
 }
 
+function formatCopilotInvocationPreview(modelId: string): string {
+  const args = createCopilotCliArgs(process.cwd(), modelId, "<prompt>");
+
+  return `copilot ${args.join(" ")}`;
+}
+
 function DryRunView({
   command,
   modelId,
@@ -610,6 +620,12 @@ function DryRunView({
   shouldStart: boolean;
   userMessage: string | null;
 }) {
+  const provider = resolveConfiguredProvider();
+  const resolvedModel =
+    modelId ??
+    process.env[OPENWIKI_MODEL_ID_ENV_KEY] ??
+    getDefaultModelId(provider);
+
   return (
     <Box flexDirection="column">
       <Header modelId={modelId} subtitle="Development dry run" />
@@ -622,16 +638,18 @@ function DryRunView({
         <StatusLine tone="muted" label="Mode" value={command} />
         <StatusLine
           tone="muted"
+          label="Provider"
+          value={`${getProviderLabel(provider)} (${provider})`}
+        />
+        <StatusLine
+          tone="muted"
           label="Credentials"
           value="not read or requested"
         />
         <StatusLine
           tone="muted"
           label="Model"
-          value={
-            modelId ??
-            `saved setting or ${getDefaultModelId(resolveConfiguredProvider())}`
-          }
+          value={modelId ?? `saved setting or ${getDefaultModelId(provider)}`}
         />
         <StatusLine tone="muted" label="Agent" value="not invoked" />
         <StatusLine tone="muted" label="Writes" value="no files or metadata" />
@@ -641,6 +659,17 @@ function DryRunView({
           label="Startup"
           value={shouldStart ? "would start run" : "would open chat"}
         />
+        {provider === "copilot" ? (
+          <StatusLine
+            tone="muted"
+            label="Copilot CLI"
+            value={
+              command === "chat"
+                ? "interactive chat unsupported (use --init/--update)"
+                : formatCopilotInvocationPreview(resolvedModel)
+            }
+          />
+        ) : null}
         {userMessage ? (
           <StatusLine tone="muted" label="Message" value={userMessage} />
         ) : null}
