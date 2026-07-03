@@ -1,6 +1,42 @@
 import { OPEN_WIKI_DIR, UPDATE_METADATA_PATH } from "../constants.js";
 import { OpenWikiCommand, RunContext, UpdateMetadata } from "./types.js";
 
+// Documentation policy shared verbatim by the standard (DeepAgents) and Copilot system
+// prompts. Only the filesystem/tooling discipline differs between the two engines; these
+// engine-agnostic blocks are defined once here to keep the two prompts in sync.
+const GIT_AND_EXISTING_DOCS_DISCIPLINE = `Git discipline:
+- Use git heavily where it helps explain why code exists, not just what code exists.
+- During init, inspect recent commit history and use git log, git show, or git blame selectively on important files to understand how major workflows, entrypoints, and business rules evolved.
+- During update, always inspect commits added since the previous successful OpenWiki run. Prefer the gitHead recorded in ${UPDATE_METADATA_PATH}; fall back to the last updatedAt timestamp if no gitHead exists.
+- Use git status and git diff to account for uncommitted local changes, especially if they touch existing docs or important source files.
+- Do not over-index on ancient history. Focus on recent commits and high-signal history for important files.
+
+Existing documentation discipline:
+- Treat existing README files, docs/ trees, root documentation files, runbooks, and SKILL.md files as primary source material.
+- Summarize and link to existing docs when they are still useful instead of duplicating them wholesale.
+- If existing docs conflict with source code or git history, call out the likely stale documentation and prefer current source evidence.`;
+
+const DOCUMENTATION_GOALS_AND_SECTION_QUALITY = `Documentation goals:
+- Someone with zero knowledge of the repository should be able to start at ${OPEN_WIKI_DIR}/quickstart.md and understand what the project is, how it is organized, what it does, and where to go next.
+- A future agent should be able to use the docs to make high-quality code changes with less source exploration.
+- Capture both technical details and business/product logic.
+- Explain why important code exists, not only what files contain.
+- Prefer clear Markdown with stable links between pages.
+- Organize the docs like human documentation, not a raw file inventory.
+- Include change-oriented guidance for future agents: where to start, what to watch out for, and which tests or checks are relevant when changing each major area.
+- Keep the docs concise enough to maintain. Avoid repeating the same concept across pages; give each concept one canonical home and link to it from other pages when needed.
+- Use git history for discovery, but do not include persistent commit hash lists in documentation unless a specific historical decision is important for future work.
+
+Section quality rules:
+- Do not create a directory unless it represents a real documentation area.
+- A section directory should usually contain multiple substantive pages. A single-file directory is acceptable only when that page is substantial, has a clear domain boundary, and is likely to grow.
+- Avoid thin pages. If a page would mostly be a stub, source map, or short note, merge it into ${OPEN_WIKI_DIR}/quickstart.md or a broader section page instead.
+- Prefer headings inside broader pages before creating many small directories.
+- Each page should provide real explanatory value: what the area does, why it exists, where to start, what to watch out for, and key source references.
+- Before finishing an init or update run, review the ${OPEN_WIKI_DIR}/ tree. Merge, move, or remove low-value single-file directories and stub pages so the wiki remains easy to navigate and maintain.
+- For small repositories with about 10 or fewer primary source files, prefer ${OPEN_WIKI_DIR}/quickstart.md plus at most 1-2 supporting pages. Avoid one-file section directories unless the boundary is clearly useful and likely to grow.
+- Avoid splitting content into separate topic pages unless there is enough distinct, repository-specific behavior to justify the split.`;
+
 function formatLastUpdate(lastUpdate: UpdateMetadata | null): string {
   if (lastUpdate === null) {
     return "No previous OpenWiki update metadata was found.";
@@ -42,17 +78,7 @@ Planning discipline:
 - Before completing the run, delete ${OPEN_WIKI_DIR}/_plan.md. If there is no filesystem delete tool, use shell execute from the repository root, for example rm -f openwiki/_plan.md.
 - Do not leave ${OPEN_WIKI_DIR}/_plan.md in the final wiki.
 
-Git discipline:
-- Use git heavily where it helps explain why code exists, not just what code exists.
-- During init, inspect recent commit history and use git log, git show, or git blame selectively on important files to understand how major workflows, entrypoints, and business rules evolved.
-- During update, always inspect commits added since the previous successful OpenWiki run. Prefer the gitHead recorded in ${UPDATE_METADATA_PATH}; fall back to the last updatedAt timestamp if no gitHead exists.
-- Use git status and git diff to account for uncommitted local changes, especially if they touch existing docs or important source files.
-- Do not over-index on ancient history. Focus on recent commits and high-signal history for important files.
-
-Existing documentation discipline:
-- Treat existing README files, docs/ trees, root documentation files, runbooks, and SKILL.md files as primary source material.
-- Summarize and link to existing docs when they are still useful instead of duplicating them wholesale.
-- If existing docs conflict with source code or git history, call out the likely stale documentation and prefer current source evidence.
+${GIT_AND_EXISTING_DOCS_DISCIPLINE}
 
 Root agent instruction files:
 - Unless the user explicitly asks you not to, always make sure the repository's top-level agent instruction files reference the OpenWiki quickstart.
@@ -95,26 +121,7 @@ Security and privacy rules:
 - Keep all documentation under ${OPEN_WIKI_DIR}/.
 - Do not modify source code outside ${OPEN_WIKI_DIR}/. The only allowed exceptions are top-level /AGENTS.md and /CLAUDE.md, and only for the OpenWiki reference section described above.
 
-Documentation goals:
-- Someone with zero knowledge of the repository should be able to start at ${OPEN_WIKI_DIR}/quickstart.md and understand what the project is, how it is organized, what it does, and where to go next.
-- A future agent should be able to use the docs to make high-quality code changes with less source exploration.
-- Capture both technical details and business/product logic.
-- Explain why important code exists, not only what files contain.
-- Prefer clear Markdown with stable links between pages.
-- Organize the docs like human documentation, not a raw file inventory.
-- Include change-oriented guidance for future agents: where to start, what to watch out for, and which tests or checks are relevant when changing each major area.
-- Keep the docs concise enough to maintain. Avoid repeating the same concept across pages; give each concept one canonical home and link to it from other pages when needed.
-- Use git history for discovery, but do not include persistent commit hash lists in documentation unless a specific historical decision is important for future work.
-
-Section quality rules:
-- Do not create a directory unless it represents a real documentation area.
-- A section directory should usually contain multiple substantive pages. A single-file directory is acceptable only when that page is substantial, has a clear domain boundary, and is likely to grow.
-- Avoid thin pages. If a page would mostly be a stub, source map, or short note, merge it into ${OPEN_WIKI_DIR}/quickstart.md or a broader section page instead.
-- Prefer headings inside broader pages before creating many small directories.
-- Each page should provide real explanatory value: what the area does, why it exists, where to start, what to watch out for, and key source references.
-- Before finishing an init or update run, review the ${OPEN_WIKI_DIR}/ tree. Merge, move, or remove low-value single-file directories and stub pages so the wiki remains easy to navigate and maintain.
-- For small repositories with about 10 or fewer primary source files, prefer ${OPEN_WIKI_DIR}/quickstart.md plus at most 1-2 supporting pages. Avoid one-file section directories unless the boundary is clearly useful and likely to grow.
-- Avoid splitting content into separate topic pages unless there is enough distinct, repository-specific behavior to justify the split.
+${DOCUMENTATION_GOALS_AND_SECTION_QUALITY}
 
 Required documentation structure:
 - ${OPEN_WIKI_DIR}/quickstart.md must be the entrypoint.
@@ -157,17 +164,7 @@ Planning discipline:
 - After discovery and before writing final documentation, create a temporary ${OPEN_WIKI_DIR}/_plan.md file that lists the intended wiki pages, source evidence for each page, and remaining questions.
 - Before completing the run, delete ${OPEN_WIKI_DIR}/_plan.md (for example, run rm -f ${OPEN_WIKI_DIR}/_plan.md from the repository root). Do not leave it in the final wiki.
 
-Git discipline:
-- Use git heavily where it helps explain why code exists, not just what code exists.
-- During init, inspect recent commit history and use git log, git show, or git blame selectively on important files to understand how major workflows, entrypoints, and business rules evolved.
-- During update, always inspect commits added since the previous successful OpenWiki run. Prefer the gitHead recorded in ${UPDATE_METADATA_PATH}; fall back to the last updatedAt timestamp if no gitHead exists.
-- Use git status and git diff to account for uncommitted local changes, especially if they touch existing docs or important source files.
-- Do not over-index on ancient history. Focus on recent commits and high-signal history for important files.
-
-Existing documentation discipline:
-- Treat existing README files, docs/ trees, root documentation files, runbooks, and SKILL.md files as primary source material.
-- Summarize and link to existing docs when they are still useful instead of duplicating them wholesale.
-- If existing docs conflict with source code or git history, call out the likely stale documentation and prefer current source evidence.
+${GIT_AND_EXISTING_DOCS_DISCIPLINE}
 
 Root agent instruction files:
 - Unless the user explicitly asks you not to, always make sure the repository's top-level agent instruction files reference the OpenWiki quickstart.
@@ -199,26 +196,7 @@ Security and privacy rules:
 - Keep all documentation under ${OPEN_WIKI_DIR}/.
 - Do not modify source code outside ${OPEN_WIKI_DIR}/. The only allowed exceptions are the top-level AGENTS.md and CLAUDE.md, and only for the OpenWiki reference section described above.
 
-Documentation goals:
-- Someone with zero knowledge of the repository should be able to start at ${OPEN_WIKI_DIR}/quickstart.md and understand what the project is, how it is organized, what it does, and where to go next.
-- A future agent should be able to use the docs to make high-quality code changes with less source exploration.
-- Capture both technical details and business/product logic.
-- Explain why important code exists, not only what files contain.
-- Prefer clear Markdown with stable links between pages.
-- Organize the docs like human documentation, not a raw file inventory.
-- Include change-oriented guidance for future agents: where to start, what to watch out for, and which tests or checks are relevant when changing each major area.
-- Keep the docs concise enough to maintain. Avoid repeating the same concept across pages; give each concept one canonical home and link to it from other pages when needed.
-- Use git history for discovery, but do not include persistent commit hash lists in documentation unless a specific historical decision is important for future work.
-
-Section quality rules:
-- Do not create a directory unless it represents a real documentation area.
-- A section directory should usually contain multiple substantive pages. A single-file directory is acceptable only when that page is substantial, has a clear domain boundary, and is likely to grow.
-- Avoid thin pages. If a page would mostly be a stub, source map, or short note, merge it into ${OPEN_WIKI_DIR}/quickstart.md or a broader section page instead.
-- Prefer headings inside broader pages before creating many small directories.
-- Each page should provide real explanatory value: what the area does, why it exists, where to start, what to watch out for, and key source references.
-- Before finishing an init or update run, review the ${OPEN_WIKI_DIR}/ tree. Merge, move, or remove low-value single-file directories and stub pages so the wiki remains easy to navigate and maintain.
-- For small repositories with about 10 or fewer primary source files, prefer ${OPEN_WIKI_DIR}/quickstart.md plus at most 1-2 supporting pages. Avoid one-file section directories unless the boundary is clearly useful and likely to grow.
-- Avoid splitting content into separate topic pages unless there is enough distinct, repository-specific behavior to justify the split.
+${DOCUMENTATION_GOALS_AND_SECTION_QUALITY}
 
 Required documentation structure:
 - ${OPEN_WIKI_DIR}/quickstart.md must be the entrypoint.
