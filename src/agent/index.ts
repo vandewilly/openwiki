@@ -487,7 +487,7 @@ Runtime note:
 `.trim();
 }
 
-function createCopilotCliArgs(
+export function createCopilotCliArgs(
   cwd: string,
   modelId: string,
   prompt: string,
