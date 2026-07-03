@@ -36,6 +36,21 @@ jobs:
           LANGCHAIN_PROJECT: openwiki
           LANGCHAIN_TRACING_V2: "true"
 
+      # --- Alternative: use GitHub Copilot instead of an inference provider ---
+      # Replace the "Install OpenWiki" and "Run OpenWiki" steps above with:
+      #
+      #   - name: Install OpenWiki and the GitHub Copilot CLI
+      #     run: npm install --global openwiki @github/copilot
+      #
+      #   - name: Run OpenWiki (Copilot engine)
+      #     run: openwiki --update --print
+      #     env:
+      #       OPENWIKI_PROVIDER: copilot
+      #       OPENWIKI_MODEL_ID: claude-sonnet-4.6
+      #       # A Copilot-entitled token (PAT or GitHub App token).
+      #       # The default GITHUB_TOKEN does not include Copilot access.
+      #       COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+
       - name: Create OpenWiki update pull request
         uses: peter-evans/create-pull-request@v7
         with:

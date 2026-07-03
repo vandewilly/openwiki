@@ -5,6 +5,7 @@ export const FIREWORKS_API_KEY_ENV_KEY = "FIREWORKS_API_KEY";
 export const OPENAI_API_KEY_ENV_KEY = "OPENAI_API_KEY";
 export const ANTHROPIC_API_KEY_ENV_KEY = "ANTHROPIC_API_KEY";
 export const OPENROUTER_API_KEY_ENV_KEY = "OPENROUTER_API_KEY";
+export const COPILOT_GITHUB_TOKEN_ENV_KEY = "COPILOT_GITHUB_TOKEN";
 export const OPENWIKI_PROVIDER_ENV_KEY = "OPENWIKI_PROVIDER";
 export const OPENWIKI_MODEL_ID_ENV_KEY = "OPENWIKI_MODEL_ID";
 export const DEFAULT_PROVIDER = "openrouter";
@@ -13,6 +14,7 @@ export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export type OpenWikiProvider =
   | "anthropic"
   | "baseten"
+  | "copilot"
   | "fireworks"
   | "openai"
   | "openrouter";
@@ -37,6 +39,7 @@ export const SELECTABLE_OPENWIKI_PROVIDERS = [
   "fireworks",
   "openai",
   "anthropic",
+  "copilot",
 ] as const satisfies readonly SelectableOpenWikiProvider[];
 
 export const PROVIDER_CONFIGS: Record<OpenWikiProvider, ProviderConfig> = {
@@ -76,6 +79,14 @@ export const PROVIDER_CONFIGS: Record<OpenWikiProvider, ProviderConfig> = {
       { id: "claude-haiku-4-5", label: "Haiku" },
       { id: "claude-sonnet-5", label: "Sonnet" },
       { id: "claude-opus-4.8", label: "Opus" },
+    ],
+  },
+  copilot: {
+    apiKeyEnvKey: COPILOT_GITHUB_TOKEN_ENV_KEY,
+    label: "GitHub Copilot",
+    modelOptions: [
+      { id: "claude-sonnet-4.6", label: "Claude Sonnet" },
+      { id: "gpt-5.2", label: "GPT-5.2" },
     ],
   },
   openrouter: {

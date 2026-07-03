@@ -44,7 +44,8 @@ export function needsCredentialSetup(
     !process.env[apiKeyEnvKey] ||
     (modelIdOverride === null &&
       process.env[OPENWIKI_MODEL_ID_ENV_KEY] === undefined) ||
-    process.env.LANGSMITH_API_KEY === undefined
+    (providerUsesLangSmith(provider) &&
+      process.env.LANGSMITH_API_KEY === undefined)
   );
 }
 
@@ -253,7 +254,10 @@ export function InitSetup({
       setInput("");
       setIsCustomModelInput(false);
 
-      if (process.env.LANGSMITH_API_KEY === undefined) {
+      if (
+        providerUsesLangSmith(provider) &&
+        process.env.LANGSMITH_API_KEY === undefined
+      ) {
         setStep("langsmith");
         return;
       }
@@ -641,7 +645,10 @@ function getInitialStep(
     return "model";
   }
 
-  if (process.env.LANGSMITH_API_KEY === undefined) {
+  if (
+    providerUsesLangSmith(provider) &&
+    process.env.LANGSMITH_API_KEY === undefined
+  ) {
     return "langsmith";
   }
 
@@ -670,7 +677,10 @@ function getNextStepAfterApiKey(
     return "model";
   }
 
-  if (process.env.LANGSMITH_API_KEY === undefined) {
+  if (
+    providerUsesLangSmith(provider) &&
+    process.env.LANGSMITH_API_KEY === undefined
+  ) {
     return "langsmith";
   }
 
@@ -776,7 +786,17 @@ function moveSelectionIndex(
 }
 
 function getProviderArticle(provider: OpenWikiProvider): "a" | "an" {
-  return provider === "baseten" || provider === "fireworks" ? "a" : "an";
+  return provider === "baseten" ||
+    provider === "fireworks" ||
+    provider === "copilot"
+    ? "a"
+    : "an";
+}
+
+// LangSmith/LangChain tracing only applies to the LangChain-backed providers. The
+// Copilot engine shells out to the Copilot CLI, so tracing captures nothing there.
+function providerUsesLangSmith(provider: OpenWikiProvider): boolean {
+  return provider !== "copilot";
 }
 
 function sanitizeInputChunk(value: string): string {

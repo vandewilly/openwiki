@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmod, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -7,7 +8,11 @@ import { ChatOpenAI } from "@langchain/openai";
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { createDeepAgent, LocalShellBackend } from "deepagents";
 import { loadOpenWikiEnv, openWikiEnvDir } from "../env.js";
-import { createSystemPrompt, createUserPrompt } from "./prompt.js";
+import {
+  createCopilotSystemPrompt,
+  createSystemPrompt,
+  createUserPrompt,
+} from "./prompt.js";
 import type {
   OpenWikiCommand,
   OpenWikiRunEvent,
@@ -17,8 +22,10 @@ import type {
 import {
   ANTHROPIC_API_KEY_ENV_KEY,
   BASETEN_API_KEY_ENV_KEY,
+  COPILOT_GITHUB_TOKEN_ENV_KEY,
   FIREWORKS_API_KEY_ENV_KEY,
   getDefaultModelId,
+  OPEN_WIKI_DIR,
   getProviderApiKeyEnvKey,
   getProviderConfig,
   getProviderLabel,
@@ -65,6 +72,19 @@ export async function runOpenWikiAgent(
       `provider.baseUrl=${JSON.stringify(providerConfig.baseURL)}`,
     );
   }
+
+  if (provider === "copilot") {
+    if (command === "chat") {
+      throw new Error(COPILOT_CHAT_UNSUPPORTED_MESSAGE);
+    }
+
+    ensureCopilotAuth(options);
+    const copilotModelId = resolveModelId(options, provider);
+    emitDebug(options, `model=${copilotModelId}`);
+
+    return await runCopilotEngine(command, cwd, options, copilotModelId);
+  }
+
   ensureProviderKey(provider);
   emitDebug(options, `credentials=${provider} key present`);
   const modelId = resolveModelId(options, provider);
@@ -375,6 +395,177 @@ function resolveModelId(
   }
 
   return modelId;
+}
+
+const COPILOT_CLI_BIN = "copilot";
+
+const COPILOT_TOKEN_ENV_KEYS = [
+  COPILOT_GITHUB_TOKEN_ENV_KEY,
+  "GH_TOKEN",
+  "GITHUB_TOKEN",
+];
+
+const COPILOT_CHAT_UNSUPPORTED_MESSAGE =
+  "The GitHub Copilot engine supports documentation runs (openwiki --init and openwiki --update, or /init and /update in the session). Interactive chat is not supported for Copilot; use /provider to switch to another provider for chat.";
+
+const COPILOT_NOT_INSTALLED_MESSAGE =
+  "GitHub Copilot CLI (`copilot`) was not found on PATH. Install it with `npm install -g @github/copilot` and sign in (or set COPILOT_GITHUB_TOKEN), then retry.";
+
+function ensureCopilotAuth(options: OpenWikiRunOptions): void {
+  const tokenEnvKey = COPILOT_TOKEN_ENV_KEYS.find((key) => process.env[key]);
+
+  emitDebug(
+    options,
+    tokenEnvKey
+      ? `copilot.auth=${tokenEnvKey} present`
+      : "copilot.auth=none (relying on existing copilot login)",
+  );
+}
+
+// Copilot engine: shell out to the official GitHub Copilot CLI instead of the
+// DeepAgents runtime. Copilot's own agent writes real files under openwiki/, so this
+// reuses the same context/snapshot/metadata scaffolding as runOpenWikiAgentCore.
+async function runCopilotEngine(
+  command: OpenWikiCommand,
+  cwd: string,
+  options: OpenWikiRunOptions,
+  modelId: string,
+): Promise<OpenWikiRunResult> {
+  const context = await createRunContext(command, cwd);
+  emitDebug(options, "context=created");
+  const openWikiSnapshotBefore = await createOpenWikiContentSnapshot(cwd);
+  emitDebug(options, "openwiki.snapshot=created");
+
+  const prompt = createCopilotEnginePrompt(command, cwd, context, options);
+  const args = createCopilotCliArgs(cwd, modelId, prompt);
+  emitDebug(
+    options,
+    `copilot.exec=${COPILOT_CLI_BIN} ${formatCopilotArgsForDebug(args)}`,
+  );
+
+  await runCopilotCli(args, cwd, options);
+  emitDebug(options, "copilot=completed");
+
+  if (openWikiSnapshotBefore !== (await createOpenWikiContentSnapshot(cwd))) {
+    await writeLastUpdateMetadata(command, cwd, modelId);
+    emitDebug(options, "metadata=written");
+  } else {
+    emitDebug(options, "metadata=skipped openwiki=unchanged");
+  }
+
+  return {
+    command,
+    model: modelId,
+  };
+}
+
+function createCopilotEnginePrompt(
+  command: OpenWikiCommand,
+  cwd: string,
+  context: Awaited<ReturnType<typeof createRunContext>>,
+  options: OpenWikiRunOptions,
+): string {
+  const systemPrompt = createCopilotSystemPrompt(command);
+  const userPrompt = createUserPrompt(
+    command,
+    context,
+    options.userMessage ?? null,
+  );
+
+  return `
+${systemPrompt}
+
+${userPrompt}
+
+Repository root:
+${cwd}
+
+Runtime note:
+- You are working directly on the real files in the repository at the path above.
+- Write documentation as real files under the repository, using repository-relative paths such as ${OPEN_WIKI_DIR}/quickstart.md.
+- Keep every read, write, and shell command inside the repository root above.
+`.trim();
+}
+
+function createCopilotCliArgs(
+  cwd: string,
+  modelId: string,
+  prompt: string,
+): string[] {
+  return [
+    "-p",
+    prompt,
+    "-s",
+    "--allow-all-tools",
+    "--no-ask-user",
+    "--add-dir",
+    cwd,
+    "--model",
+    modelId,
+  ];
+}
+
+function runCopilotCli(
+  args: string[],
+  cwd: string,
+  options: OpenWikiRunOptions,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(COPILOT_CLI_BIN, args, {
+      cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stderr = "";
+
+    child.stdout?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => {
+      if (chunk.length > 0) {
+        options.onEvent?.({
+          source: "main",
+          type: "text",
+          text: chunk,
+        });
+      }
+    });
+
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+
+    child.on("error", (error) => {
+      reject(
+        isFileNotFoundError(error)
+          ? new Error(COPILOT_NOT_INSTALLED_MESSAGE)
+          : error,
+      );
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(formatCopilotFailure(code, stderr)));
+    });
+  });
+}
+
+function formatCopilotFailure(code: number | null, stderr: string): string {
+  const trimmedStderr = stderr.trim();
+  const suffix = trimmedStderr.length > 0 ? `\n${trimmedStderr}` : "";
+
+  return `GitHub Copilot CLI exited with code ${code ?? "unknown"}.${suffix}`;
+}
+
+function formatCopilotArgsForDebug(args: string[]): string {
+  return args
+    .map((arg) => (arg.length > 60 ? `${arg.slice(0, 57)}...` : arg))
+    .map((arg) => (/\s/u.test(arg) ? JSON.stringify(arg) : arg))
+    .join(" ");
 }
 
 async function createModel(provider: OpenWikiProvider, modelId: string) {
